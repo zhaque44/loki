@@ -2,7 +2,10 @@ package v1
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"github.com/go-kit/kit/log/level"
+	util_log "github.com/grafana/loki/pkg/util/log"
 	"hash"
 	"io"
 	"sort"
@@ -166,6 +169,8 @@ func (b *BloomBlockBuilder) Close() (uint32, error) {
 
 	b.scratch.Reset()
 	b.scratch.PutUvarint(len(b.pages))
+	level.Info(util_log.Logger).Log("msg", "Closing bloom block, len pages", "pages", len(b.pages))
+
 	for _, h := range b.pages {
 		h.Encode(b.scratch)
 	}
@@ -175,10 +180,12 @@ func (b *BloomBlockBuilder) Close() (uint32, error) {
 	b.scratch.PutBE64(uint64(b.offset))
 
 	crc32Hash := Crc32HashPool.Get()
+
 	defer Crc32HashPool.Put(crc32Hash)
 	// wrap with final checksum
 	b.scratch.PutHash(crc32Hash)
 	_, err := b.writer.Write(b.scratch.Get())
+	level.Info(util_log.Logger).Log("msg", "Closing bloom block, checksum values", "hash from pool", crc32Hash.Sum32(), "after putHash", binary.BigEndian.Uint64(b.scratch.Get()))
 	if err != nil {
 		return 0, errors.Wrap(err, "writing bloom page headers")
 	}
