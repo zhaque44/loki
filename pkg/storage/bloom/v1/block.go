@@ -2,6 +2,8 @@ package v1
 
 import (
 	"fmt"
+	"github.com/go-kit/kit/log/level"
+	util_log "github.com/grafana/loki/pkg/util/log"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -109,7 +111,9 @@ func (bq *BlockQuerier) Next() bool {
 	series := bq.series.At()
 
 	bq.blooms.Seek(series.Offset)
-	if !bq.blooms.Next() {
+	if bq.blooms.Err() != nil || !bq.blooms.Next() {
+
+		level.Info(util_log.Logger).Log("msg", "error seeking to series offset", "offset", series.Offset, "err", bq.blooms.Err())
 		return false
 	}
 
@@ -154,7 +158,7 @@ func (bq *BlockQuerier) CheckChunksForSeries(fp model.Fingerprint, chks ChunkRef
 	}
 
 	bq.blooms.Seek(series.Offset)
-	if !bq.blooms.Next() {
+	if bq.blooms.Err() != nil || !bq.blooms.Next() {
 		return chks, fmt.Errorf("seeking to bloom for fp: %v", fp)
 	}
 
