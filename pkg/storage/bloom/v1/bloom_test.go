@@ -5,14 +5,13 @@ import (
 	"testing"
 )
 
-func TestEncodeDecode(t *testing.T) {
+func TestEncodeDecode(_ *testing.T) {
 	numSeries := 100
 	numKeysPerSeries := 10000
 	data, _ := mkBasicSeriesWithBlooms(numSeries, numKeysPerSeries, 0, 0xffff, 0, 10000)
 	enc := &encoding.Encbuf{}
-	data[0].Bloom.Encode(enc)
+	_ = data[0].Bloom.Encode(enc)
 	dec := encoding.DecWith(enc.Get())
 	var bloom Bloom
-	bloom.Decode(&dec)
-
+	_ = bloom.Decode(&dec)
 }

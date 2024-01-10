@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log/level"
 	util_log "github.com/grafana/loki/pkg/util/log"
 	"hash"
 	"io"

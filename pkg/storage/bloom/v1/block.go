@@ -2,7 +2,7 @@ package v1
 
 import (
 	"fmt"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log/level"
 	util_log "github.com/grafana/loki/pkg/util/log"
 
 	"github.com/pkg/errors"
