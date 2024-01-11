@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/stretchr/testify/require"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -123,4 +124,99 @@ func TestReadingAllLocalFiles(t *testing.T) {
 	fmt.Println("Got here")
 	cmd = exec.Command("rm", "-rf", "/tmp/foo")
 	_ = cmd.Run()
+}
+
+func TestReadingAllLocalFilesAndDoMore(t *testing.T) {
+	var (
+		dir = "/Users/progers/baddat/loki_dev_006_index_19731/29/blooms/"
+	)
+	cmd := exec.Command("mkdir", "/tmp/foo")
+	_ = cmd.Run()
+	files, _ := listFilesRecursive(dir)
+	blockIters := make([]PeekingIterator[*SeriesWithBloom], len(files))
+	for i, file := range files {
+		tmpDirI := "/tmp/foo/" + strconv.Itoa(i)
+		cmd := exec.Command("mkdir", tmpDirI)
+		_ = cmd.Run()
+		fmt.Println(file)
+		file, _ := os.Open(file)
+		defer file.Close()
+		reader := bufio.NewReader(file)
+		UnTarGz(tmpDirI, reader)
+		r := NewDirectoryBlockReader(tmpDirI)
+		err := r.Init()
+		require.NoError(t, err)
+
+		_, err = r.Index()
+		require.NoError(t, err)
+
+		_, err = r.Blooms()
+		require.NoError(t, err)
+
+		block := NewBlock(r)
+		blockQuerier := NewBlockQuerier(block)
+		blockIters[i] = NewPeekingIter[*SeriesWithBloom](blockQuerier)
+
+	}
+	seriesFromSeriesMeta := make([]*Series, 0)
+	seriesIter := NewSliceIter(seriesFromSeriesMeta)
+	populate := createPopulateFunc()
+	blockOptions := NewBlockOptions(4, 0)
+	mergeBlockBuilder, _ := NewPersistentBlockBuilder("/tmp/foo", blockOptions)
+	//mergedBlocks := NewPeekingIter[*SeriesWithBloom](NewHeapIterForSeriesWithBloom(blockIters...))
+	mergeBuilder := NewMergeBuilder(
+		blockIters,
+		seriesIter,
+		populate)
+
+	fmt.Printf("made merge builder\n")
+	_, _ = mergeBlockBuilder.MergeBuild(mergeBuilder)
+	fmt.Printf("did merge build\n")
+
+	cmd = exec.Command("rm", "-rf", "/tmp/foo")
+	_ = cmd.Run()
+}
+
+func createPopulateFunc() func(series *Series, bloom *Bloom) error {
+	return func(series *Series, bloom *Bloom) error {
+		return nil
+	}
+}
+
+type PersistentBlockBuilder struct {
+	builder  *BlockBuilder
+	localDst string
+}
+
+func NewPersistentBlockBuilder(localDst string, blockOptions BlockOptions) (*PersistentBlockBuilder, error) {
+	// write bloom to a local dir
+	b, err := NewBlockBuilder(blockOptions, NewDirectoryBlockWriter(localDst))
+	if err != nil {
+		return nil, err
+	}
+	builder := PersistentBlockBuilder{
+		builder:  b,
+		localDst: localDst,
+	}
+	return &builder, nil
+}
+
+func (p *PersistentBlockBuilder) BuildFrom(itr Iterator[SeriesWithBloom]) (uint32, error) {
+	return p.builder.BuildFrom(itr)
+}
+
+func (p *PersistentBlockBuilder) mergeBuild(builder *MergeBuilder) (uint32, error) {
+	return builder.Build(p.builder)
+}
+
+func (p *PersistentBlockBuilder) MergeBuild(builder *MergeBuilder) (uint32, error) {
+	return builder.Build(p.builder)
+}
+
+func (p *PersistentBlockBuilder) Data() (io.ReadSeekCloser, error) {
+	blockFile, err := os.Open(filepath.Join(p.localDst, BloomFileName))
+	if err != nil {
+		return nil, err
+	}
+	return blockFile, nil
 }
